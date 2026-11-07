@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/order_service}
+
+logging:
+  level:
+    org.hibernate.SQL: debug
