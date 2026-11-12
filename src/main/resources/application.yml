@@ -21,6 +21,11 @@ spring:
   liquibase:
     change-log: classpath:db/changelog/master.yaml
 
+  cloud:
+    circuitbreaker:
+      resilience4j:
+        disable-time-limiter: true
+
 server:
   port: ${SERVER_PORT:8083}
 

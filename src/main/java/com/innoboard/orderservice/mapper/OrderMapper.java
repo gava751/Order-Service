@@ -19,7 +19,7 @@ public interface OrderMapper {
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "totalPrice", ignore = true)
     @Mapping(target = "deleted", ignore = true)
-    @Mapping(target = "orderItems", source = "items")
+    @Mapping(target = "orderItems", ignore = true)
     OrderEntity toEntity(CreateOrderRequest request);
 
     @Mapping(target = "id", source = "order.id")

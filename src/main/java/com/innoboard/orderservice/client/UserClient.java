@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 
 @Component
@@ -23,19 +24,21 @@ public class UserClient {
     }
 
     public UserInfoResponse getUserById(Long id) {
-        return runWithCircuitBreaker(() -> userRestClient.get()
-                .uri("/internal/users/{id}", id)
-                .retrieve()
-                .body(UserInfoResponse.class));
+        return runWithCircuitBreaker(() -> execute(
+                () -> userRestClient.get()
+                        .uri("/internal/users/{id}", id)
+                        .retrieve()
+                        .body(UserInfoResponse.class)));
     }
 
     public UserInfoResponse getUserByEmail(String email) {
-        return runWithCircuitBreaker(() -> userRestClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/internal/users/by-email")
-                        .queryParam("email", email)
-                        .build())
-                .retrieve()
-                .body(UserInfoResponse.class));
+        return runWithCircuitBreaker(() -> execute(
+                () -> userRestClient.get()
+                        .uri(uriBuilder -> uriBuilder.path("/internal/users/by-email")
+                                .queryParam("email", email)
+                                .build())
+                        .retrieve()
+                        .body(UserInfoResponse.class)));
     }
 
     private UserInfoResponse runWithCircuitBreaker(Supplier<UserInfoResponse> call) {
@@ -43,15 +46,24 @@ public class UserClient {
                 .run(call, this::onFailure);
     }
 
-    private UserInfoResponse onFailure(Throwable throwable) {
-        if (throwable instanceof RestClientResponseException e) {
+    private UserInfoResponse execute(Supplier<UserInfoResponse> call) {
+        try {
+            return call.get();
+        } catch (RestClientResponseException e) {
             if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
                 throw new UserNotFoundException("User not found in User Service");
             }
-            throw new UserServiceUnavailableException();
-        }
-        if (throwable instanceof RuntimeException e) {
             throw e;
+        }
+    }
+
+    private UserInfoResponse onFailure(Throwable throwable) {
+        Throwable cause = throwable;
+        while (cause instanceof ExecutionException executionException && executionException.getCause() != null) {
+            cause = executionException.getCause();
+        }
+        if (cause instanceof UserNotFoundException userNotFoundException) {
+            throw userNotFoundException;
         }
         throw new UserServiceUnavailableException();
     }
