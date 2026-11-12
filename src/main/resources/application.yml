@@ -24,6 +24,14 @@ spring:
 server:
   port: ${SERVER_PORT:8083}
 
+app:
+  internal:
+    token: ${INTERNAL_SERVICE_TOKEN}
+  services:
+    user-url: ${USER_SERVICE_URL:http://localhost:8082}
+    connect-timeout: ${USER_SERVICE_CONNECT_TIMEOUT:2s}
+    read-timeout: ${USER_SERVICE_READ_TIMEOUT:5s}
+
 management:
   endpoints:
     web:
@@ -33,3 +41,6 @@ management:
     health:
       probes:
         enabled: true
+  health:
+    circuitbreakers:
+      enabled: true

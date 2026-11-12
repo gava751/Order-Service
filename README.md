@@ -43,12 +43,16 @@ service: `order_items → orders`, `order_items → items`.
 All database and server settings are provided via environment variables.
 Local values live in an ignored `.env` (see `.env.example`):
 
-| Variable      | Default (local)                                    | Description              |
-|---------------|----------------------------------------------------|--------------------------|
-| `DB_URL`      | `jdbc:postgresql://localhost:5432/order_service`   | JDBC URL                 |
-| `DB_USERNAME` | — (no default, required)                           | DB user                  |
-| `DB_PASSWORD` | — (no default, required)                           | DB password              |
-| `SERVER_PORT` | `8083`                                             | HTTP port                |
+| Variable                | Default (local)                                    | Description                                        |
+|-------------------------|----------------------------------------------------|----------------------------------------------------|
+| `DB_URL`                | `jdbc:postgresql://localhost:5432/order_service`   | JDBC URL                                           |
+| `DB_USERNAME`           | — (no default, required)                           | DB user                                            |
+| `DB_PASSWORD`           | — (no default, required)                           | DB password                                        |
+| `SERVER_PORT`           | `8083`                                             | HTTP port                                          |
+| `USER_SERVICE_URL`      | `http://localhost:8082`                            | User Service base URL (user info by email/id)      |
+| `USER_SERVICE_CONNECT_TIMEOUT` | `2s`                                        | User Service connect timeout                       |
+| `USER_SERVICE_READ_TIMEOUT`    | `5s`                                        | User Service read timeout                          |
+| `INTERNAL_SERVICE_TOKEN` | — (no default, required)                          | Shared internal token, must match User Service     |
 
 ## Running locally
 
@@ -62,9 +66,3 @@ docker run -d --name order-service-db \
 export JAVA_HOME="C:/Users/gava751/.jdks/temurin-25.0.4.1"
 ./mvnw spring-boot:run
 ```
-
-On startup Liquibase applies the changelogs; a restart applies nothing
-again (the `databasechangelog` journal makes migrations idempotent).
-
-Health probes for Kubernetes: `GET /actuator/health/liveness`,
-`GET /actuator/health/readiness`.
