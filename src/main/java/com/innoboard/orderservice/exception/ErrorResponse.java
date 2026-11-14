@@ -1,6 +1,7 @@
 package com.innoboard.orderservice.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 
 import java.time.LocalDateTime;
 
@@ -14,5 +15,9 @@ public record ErrorResponse(
 
     public static ErrorResponse of(HttpStatus status, String message, String path) {
         return new ErrorResponse(LocalDateTime.now(), status.value(), status.getReasonPhrase(), message, path);
+    }
+
+    public static ErrorResponse of(HttpStatusCode status, String message, String path) {
+        return new ErrorResponse(LocalDateTime.now(), status.value(), status.toString(), message, path);
     }
 }

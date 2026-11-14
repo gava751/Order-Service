@@ -130,6 +130,24 @@ class OrderFlowIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("create with missing item id returns 400")
+    void createOrderWithMissingItemIdReturnsBadRequest() throws Exception {
+        String body = objectMapper.writeValueAsString(new CreateOrderRequest("ivan@example.com",
+                List.of(new OrderItemRequest(null, 1))));
+
+        mockMvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors", hasKey("items[0].itemId")));
+    }
+
+    @Test
+    @DisplayName("create with unsupported content type returns 415")
+    void createOrderWithUnsupportedMediaTypeReturnsUnsupported() throws Exception {
+        mockMvc.perform(post("/api/orders").contentType(MediaType.TEXT_PLAIN).content("order"))
+                .andExpect(status().isUnsupportedMediaType());
+    }
+
+    @Test
     @DisplayName("get by id returns order with user info")
     void getOrderByIdReturnsOrder() throws Exception {
         OrderResponse created = createDefaultOrder();

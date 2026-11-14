@@ -20,10 +20,12 @@ import com.innoboard.orderservice.repository.specification.OrderSpecifications;
 import com.innoboard.orderservice.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -33,7 +35,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -43,9 +44,9 @@ public class OrderServiceImpl implements OrderService {
     private final UserClient userClient;
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
+    private final TransactionTemplate transactionTemplate;
 
     @Override
-    @Transactional
     public OrderResponse create(CreateOrderRequest request) {
         UserInfoResponse user = userClient.getUserByEmail(request.userEmail());
         Map<Long, ItemEntity> itemsById = loadItems(request.items());
@@ -63,14 +64,13 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public OrderResponse getById(Long id) {
-        OrderEntity order = findOrderOrThrow(id);
+        OrderEntity order = orderRepository.findWithItemsByIdAndDeletedFalse(id)
+                .orElseThrow(() -> new OrderNotFoundException(id));
         return orderMapper.toResponse(order, userClient.getUserById(order.getUserId()));
     }
 
     @Override
-    @Transactional(readOnly = true)
     public Page<OrderResponse> getAll(Instant createdFrom, Instant createdTo,
                                       Set<OrderStatus> statuses, Pageable pageable) {
         Specification<OrderEntity> spec = OrderSpecifications.notDeleted()
@@ -78,32 +78,29 @@ public class OrderServiceImpl implements OrderService {
                 .and(OrderSpecifications.createdBefore(createdTo))
                 .and(OrderSpecifications.hasStatusIn(statuses));
         Page<OrderEntity> page = orderRepository.findAll(spec, pageable);
+        List<OrderEntity> ordersWithItems = orderRepository
+                .findAllWithItemsByIdIn(page.map(OrderEntity::getId).toSet());
+        Map<Long, OrderEntity> ordersById = ordersWithItems.stream()
+                .collect(Collectors.toMap(OrderEntity::getId, Function.identity()));
         Map<Long, UserInfoResponse> usersById = loadUsers(page.map(OrderEntity::getUserId).toSet());
-        return page.map(order -> orderMapper.toResponse(order, usersById.get(order.getUserId())));
+        List<OrderResponse> responses = page.stream()
+                .map(order -> orderMapper.toResponse(ordersById.get(order.getId()),
+                        usersById.get(order.getUserId())))
+                .toList();
+        return new PageImpl<>(responses, pageable, page.getTotalElements());
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<OrderResponse> getAllByUserId(Long userId) {
         UserInfoResponse user = userClient.getUserById(userId);
-        return orderRepository.findAllByUserIdAndDeletedFalse(userId).stream()
+        return orderRepository.findAllWithItemsByUserIdAndDeletedFalse(userId).stream()
                 .map(order -> orderMapper.toResponse(order, user))
                 .toList();
     }
 
     @Override
-    @Transactional
     public OrderResponse update(Long id, UpdateOrderRequest request) {
-        OrderEntity order = findOrderOrThrow(id);
-        Map<Long, ItemEntity> itemsById = loadItems(request.items());
-        order.getOrderItems().clear();
-        order.setTotalPrice(calculateTotalPrice(request.items(), itemsById));
-        for (OrderItemRequest itemRequest : request.items()) {
-            OrderItemEntity orderItem = orderItemMapper.toEntity(itemRequest);
-            orderItem.setItem(itemsById.get(itemRequest.itemId()));
-            order.addItem(orderItem);
-        }
-        orderRepository.save(order);
+        OrderEntity order = transactionTemplate.execute(status -> applyUpdate(id, request));
         return orderMapper.toResponse(order, userClient.getUserById(order.getUserId()));
     }
 
@@ -113,6 +110,19 @@ public class OrderServiceImpl implements OrderService {
         OrderEntity order = findOrderOrThrow(id);
         order.setDeleted(true);
         orderRepository.save(order);
+    }
+
+    private OrderEntity applyUpdate(Long id, UpdateOrderRequest request) {
+        Map<Long, ItemEntity> itemsById = loadItems(request.items());
+        OrderEntity order = findOrderOrThrow(id);
+        order.getOrderItems().clear();
+        order.setTotalPrice(calculateTotalPrice(request.items(), itemsById));
+        for (OrderItemRequest itemRequest : request.items()) {
+            OrderItemEntity orderItem = orderItemMapper.toEntity(itemRequest);
+            orderItem.setItem(itemsById.get(itemRequest.itemId()));
+            order.addItem(orderItem);
+        }
+        return orderRepository.save(order);
     }
 
     private OrderEntity findOrderOrThrow(Long id) {

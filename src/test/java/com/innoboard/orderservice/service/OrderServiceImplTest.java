@@ -31,6 +31,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -41,7 +44,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -60,6 +65,8 @@ class OrderServiceImplTest {
     private ItemRepository itemRepository;
     @Mock
     private UserClient userClient;
+    @Mock
+    private TransactionTemplate transactionTemplate;
 
     private OrderServiceImpl orderService;
 
@@ -68,7 +75,9 @@ class OrderServiceImplTest {
         OrderMapperImpl orderMapper = new OrderMapperImpl();
         ReflectionTestUtils.setField(orderMapper, "orderItemMapper", new OrderItemMapperImpl());
         orderService = new OrderServiceImpl(orderRepository, itemRepository, userClient,
-                orderMapper, new OrderItemMapperImpl());
+                orderMapper, new OrderItemMapperImpl(), transactionTemplate);
+        lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation ->
+                ((TransactionCallback<?>) invocation.getArgument(0)).doInTransaction(new SimpleTransactionStatus()));
     }
 
     private UserInfoResponse user(Long id) {
@@ -169,7 +178,7 @@ class OrderServiceImplTest {
         @Test
         @DisplayName("returns order enriched with user info")
         void returnsEnrichedOrder() {
-            when(orderRepository.findByIdAndDeletedFalse(10L)).thenReturn(Optional.of(order(10L, 5L)));
+            when(orderRepository.findWithItemsByIdAndDeletedFalse(10L)).thenReturn(Optional.of(order(10L, 5L)));
             when(userClient.getUserById(5L)).thenReturn(user(5L));
 
             OrderResponse response = orderService.getById(10L);
@@ -184,7 +193,7 @@ class OrderServiceImplTest {
         @Test
         @DisplayName("unknown order throws OrderNotFoundException without user lookup")
         void unknownOrderThrowsWithoutUserLookup() {
-            when(orderRepository.findByIdAndDeletedFalse(99L)).thenReturn(Optional.empty());
+            when(orderRepository.findWithItemsByIdAndDeletedFalse(99L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.getById(99L))
                     .isInstanceOf(OrderNotFoundException.class);
@@ -205,6 +214,7 @@ class OrderServiceImplTest {
             OrderEntity third = order(3L, 7L);
             when(orderRepository.findAll(any(Specification.class), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of(first, second, third), PageRequest.of(0, 10), 3));
+            when(orderRepository.findAllWithItemsByIdIn(anyCollection())).thenReturn(List.of(first, second, third));
             when(userClient.getUserById(5L)).thenReturn(user(5L));
             when(userClient.getUserById(7L)).thenReturn(user(7L));
 
@@ -224,7 +234,7 @@ class OrderServiceImplTest {
         @DisplayName("resolves user first and returns all orders with the same user info")
         void resolvesUserFirstAndReturnsOrders() {
             when(userClient.getUserById(5L)).thenReturn(user(5L));
-            when(orderRepository.findAllByUserIdAndDeletedFalse(5L))
+            when(orderRepository.findAllWithItemsByUserIdAndDeletedFalse(5L))
                     .thenReturn(List.of(order(1L, 5L), order(2L, 5L)));
 
             List<OrderResponse> orders = orderService.getAllByUserId(5L);
@@ -274,6 +284,7 @@ class OrderServiceImplTest {
         @Test
         @DisplayName("unknown order throws OrderNotFoundException without saving")
         void unknownOrderThrowsWithoutSaving() {
+            when(itemRepository.findAllById(anySet())).thenReturn(List.of(item(1L, "Phone", "100.00")));
             when(orderRepository.findByIdAndDeletedFalse(99L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.update(99L,
@@ -281,14 +292,13 @@ class OrderServiceImplTest {
                     .isInstanceOf(OrderNotFoundException.class);
 
             verify(orderRepository, never()).save(any(OrderEntity.class));
-            verifyNoInteractions(itemRepository, userClient);
+            verifyNoInteractions(userClient);
         }
 
         @Test
-        @DisplayName("missing item throws ItemNotFoundException leaving existing items untouched")
-        void missingItemLeavesExistingItemsUntouched() {
+        @DisplayName("missing item throws ItemNotFoundException before any order modification")
+        void missingItemThrowsBeforeOrderModification() {
             OrderEntity existing = order(10L, 5L);
-            when(orderRepository.findByIdAndDeletedFalse(10L)).thenReturn(Optional.of(existing));
             when(itemRepository.findAllById(anySet())).thenReturn(List.of(item(1L, "Phone", "100.00")));
 
             assertThatThrownBy(() -> orderService.update(10L,
