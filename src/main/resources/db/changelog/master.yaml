@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/changes/001-create-items-table.xml
+  - include:
+      file: db/changelog/changes/002-create-orders-table.xml
+  - include:
+      file: db/changelog/changes/003-create-order-items-table.xml
+  - include:
+      file: db/changelog/changes/004-add-orders-created-at-index.xml

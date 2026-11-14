@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="003-create-order-items-table" author="gava751">
+        <createTable tableName="order_items">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="order_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="item_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="quantity" type="int">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="timestamptz">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="timestamptz">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="order_items"
+                baseColumnNames="order_id"
+                constraintName="fk_order_items_order"
+                referencedTableName="orders"
+                referencedColumnNames="id"/>
+
+        <addForeignKeyConstraint
+                baseTableName="order_items"
+                baseColumnNames="item_id"
+                constraintName="fk_order_items_item"
+                referencedTableName="items"
+                referencedColumnNames="id"/>
+
+        <rollback>
+            <dropTable tableName="order_items"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="003-create-order-items-indexes" author="gava751">
+        <createIndex indexName="idx_order_items_order_id" tableName="order_items">
+            <column name="order_id"/>
+        </createIndex>
+
+        <createIndex indexName="idx_order_items_item_id" tableName="order_items">
+            <column name="item_id"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_order_items_item_id" tableName="order_items"/>
+            <dropIndex indexName="idx_order_items_order_id" tableName="order_items"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
