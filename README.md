@@ -53,6 +53,9 @@ Local values live in an ignored `.env` (see `.env.example`):
 | `USER_SERVICE_CONNECT_TIMEOUT` | `2s`                                        | User Service connect timeout                       |
 | `USER_SERVICE_READ_TIMEOUT`    | `5s`                                        | User Service read timeout                          |
 | `INTERNAL_SERVICE_TOKEN` | — (no default, required)                          | Shared internal token, must match User Service     |
+| `POSTGRES_USER`         | — (no default, required)                           | Postgres user for docker compose                   |
+| `POSTGRES_PASSWORD`     | — (no default, required)                           | Postgres password for docker compose               |
+| `POSTGRES_DB`           | — (no default, required)                           | Postgres database for docker compose               |
 
 ## Running locally
 
@@ -66,3 +69,14 @@ docker run -d --name order-service-db \
 export JAVA_HOME="C:/Users/gava751/.jdks/temurin-25.0.4.1"
 ./mvnw spring-boot:run
 ```
+
+## Running with docker compose
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Liquibase applies the changelogs on app startup; the User Service
+(`USER_SERVICE_URL`, default `http://host.docker.internal:8082`) must be
+running for order endpoints to resolve user info.
